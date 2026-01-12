@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Commute Cams</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a0f;
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        .header {
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 { font-size: 1.1em; font-weight: 500; }
+        .header .time { font-size: 1.2em; font-weight: 300; }
+        .status {
+            padding: 6px 16px;
+            background: #111;
+            font-size: 0.75em;
+            color: #666;
+        }
+        .tabs {
+            display: flex;
+            gap: 8px;
+            padding: 10px 16px;
+            background: #111;
+            overflow-x: auto;
+        }
+        .tab {
+            padding: 6px 14px;
+            background: #222;
+            border: none;
+            border-radius: 16px;
+            color: #888;
+            cursor: pointer;
+            font-size: 0.85em;
+            white-space: nowrap;
+        }
+        .tab.active { background: #0066cc; color: #fff; }
+        .tab .count {
+            background: rgba(255,255,255,0.2);
+            padding: 1px 6px;
+            border-radius: 8px;
+            margin-left: 4px;
+            font-size: 0.85em;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 6px;
+            padding: 8px;
+        }
+        .cam {
+            position: relative;
+            background: #111;
+            border-radius: 6px;
+            overflow: hidden;
+            aspect-ratio: 16/9;
+        }
+        .cam video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .cam .badge {
+            position: absolute;
+            top: 6px;
+            left: 6px;
+            background: rgba(0,100,200,0.85);
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 0.7em;
+            font-weight: 600;
+        }
+        .cam .dot {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #444;
+        }
+        .cam .dot.live { background: #0c6; animation: pulse 2s infinite; }
+        .cam .dot.err { background: #c33; }
+        .cam .label {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 20px 10px 6px;
+            background: linear-gradient(transparent, rgba(0,0,0,0.85));
+            font-size: 0.75em;
+        }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        .fs {
+            position: fixed;
+            inset: 0;
+            z-index: 999;
+            background: #000;
+        }
+        .fs video { width: 100%; height: 100%; object-fit: contain; }
+        .fs .x {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: rgba(0,0,0,0.6);
+            border: none;
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Culver City → Long Beach</h1>
+        <span class="time" id="clock"></span>
+    </div>
+    <div class="status">Updated Jan 11, 08:04 PM • 23 cameras</div>
+    <div class="tabs">
+        <button class="tab active" data-r="all">All <span class="count">23</span></button>
+        <button class="tab" data-r="405">405 <span class="count">2</span></button>
+        <button class="tab" data-r="710">710 <span class="count">7</span></button>
+        <button class="tab" data-r="110">110 <span class="count">9</span></button>
+        <button class="tab" data-r="10">10 <span class="count">5</span></button>
+    </div>
+    <div class="grid" id="grid"></div>
+<script>
+const cams = [
+    {r:"405",n:"(359) La Tijera",s:"https://wzmedia.dot.ca.gov/D7/CCTV-359.stream/playlist.m3u8"},
+    {r:"405",n:"(345) Western Ave",s:"https://wzmedia.dot.ca.gov/D7/CCTV-345.stream/playlist.m3u8"},
+    {r:"710",n:"(285) 3rd St",s:"https://wzmedia.dot.ca.gov/D7/CCTV-285.stream/playlist.m3u8"},
+    {r:"710",n:"(283) South of I-5",s:"https://wzmedia.dot.ca.gov/D7/CCTV-283.stream/playlist.m3u8"},
+    {r:"710",n:"(271) N/O Route 91",s:"https://wzmedia.dot.ca.gov/D7/CCTV-271.stream/playlist.m3u8"},
+    {r:"710",n:"(269) Long Beach Blvd",s:"https://wzmedia.dot.ca.gov/D7/CCTV-269.stream/playlist.m3u8"},
+    {r:"710",n:"(268) Del Amo Bl",s:"https://wzmedia.dot.ca.gov/D7/CCTV-268.stream/playlist.m3u8"},
+    {r:"710",n:"(267) North of I-405",s:"https://wzmedia.dot.ca.gov/D7/CCTV-267.stream/playlist.m3u8"},
+    {r:"710",n:"(954) North of SR-47",s:"https://wzmedia.dot.ca.gov/D7/CCTV-954.stream/playlist.m3u8"},
+    {r:"110",n:"(184) 11th St",s:"https://wzmedia.dot.ca.gov/D7/CCTV-184.stream/playlist.m3u8"},
+    {r:"110",n:"(178) Exposition Blvd",s:"https://wzmedia.dot.ca.gov/D7/CCTV-178.stream/playlist.m3u8"},
+    {r:"110",n:"(177) Martin Luther King Blvd",s:"https://wzmedia.dot.ca.gov/D7/CCTV-177.stream/playlist.m3u8"},
+    {r:"110",n:"(175) SO SLAUSON AVE",s:"https://wzmedia.dot.ca.gov/D7/CCTV-175.stream/playlist.m3u8"},
+    {r:"110",n:"(171) NO Manchester Ave",s:"https://wzmedia.dot.ca.gov/D7/CCTV-171.stream/playlist.m3u8"},
+    {r:"110",n:"(170) North Of Century Blvd",s:"https://wzmedia.dot.ca.gov/D7/CCTV-170.stream/playlist.m3u8"},
+    {r:"110",n:"(167) SO El Segundo Blvd",s:"https://wzmedia.dot.ca.gov/D7/CCTV-167.stream/playlist.m3u8"},
+    {r:"110",n:"(164) S/O El Segundo Blvd",s:"https://wzmedia.dot.ca.gov/D7/CCTV-164.stream/playlist.m3u8"},
+    {r:"110",n:"(166) South Of Rosecrans Ave",s:"https://wzmedia.dot.ca.gov/D7/CCTV-166.stream/playlist.m3u8"},
+    {r:"10",n:"(123) Route 110 CHP Tower",s:"https://wzmedia.dot.ca.gov/D7/CCTV-123.stream/playlist.m3u8"},
+    {r:"10",n:"(117) Crenshaw Blvd",s:"https://wzmedia.dot.ca.gov/D7/CCTV-117.stream/playlist.m3u8"},
+    {r:"10",n:"(125) Griffith/San Pedro",s:"https://wzmedia.dot.ca.gov/D7/CCTV-125.stream/playlist.m3u8"},
+    {r:"10",n:"(126) Channing Street",s:"https://wzmedia.dot.ca.gov/D7/CCTV-126.stream/playlist.m3u8"},
+    {r:"10",n:"(101) Mcclure West",s:"https://wzmedia.dot.ca.gov/D7/CCTV-101.stream/playlist.m3u8"}
+];
+
+const players = new Map();
+
+function updateClock() {
+    document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-US', {
+        hour: 'numeric', minute: '2-digit', hour12: true
+    });
+}
+
+function mkCam(c, i) {
+    const d = document.createElement('div');
+    d.className = 'cam';
+    d.dataset.r = c.r;
+    d.innerHTML = `
+        <video id="v${i}" muted playsinline></video>
+        <div class="badge">${c.r}</div>
+        <div class="dot" id="d${i}"></div>
+        <div class="label">${c.n}</div>
+    `;
+    d.onclick = () => fullscreen(i);
+    return d;
+}
+
+function initHls(i, url) {
+    const v = document.getElementById('v'+i);
+    const d = document.getElementById('d'+i);
+
+    if (Hls.isSupported()) {
+        const h = new Hls({ enableWorker: true, lowLatencyMode: true });
+        h.loadSource(url);
+        h.attachMedia(v);
+        h.on(Hls.Events.MANIFEST_PARSED, () => { v.play().catch(()=>{}); d.className='dot live'; });
+        h.on(Hls.Events.ERROR, (_,e) => {
+            if (e.fatal) { d.className='dot err'; setTimeout(() => h.loadSource(url), 15000); }
+        });
+        players.set(i, h);
+    } else if (v.canPlayType('application/vnd.apple.mpegurl')) {
+        v.src = url;
+        v.onloadedmetadata = () => { v.play().catch(()=>{}); d.className='dot live'; };
+    }
+}
+
+function filter(r) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.r === r));
+    document.querySelectorAll('.cam').forEach(c => c.style.display = (r==='all' || c.dataset.r===r) ? 'block' : 'none');
+}
+
+function fullscreen(i) {
+    if (document.querySelector('.fs')) { document.querySelector('.fs').remove(); return; }
+    const d = document.createElement('div');
+    d.className = 'fs';
+    d.innerHTML = `<video id="fsv" muted playsinline autoplay></video><button class="x">✕</button>`;
+    document.body.appendChild(d);
+
+    const v = document.getElementById('fsv');
+    if (Hls.isSupported()) {
+        const h = new Hls();
+        h.loadSource(cams[i].s);
+        h.attachMedia(v);
+        h.on(Hls.Events.MANIFEST_PARSED, () => v.play());
+    } else v.src = cams[i].s;
+
+    d.querySelector('.x').onclick = () => d.remove();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const g = document.getElementById('grid');
+    cams.forEach((c,i) => { g.appendChild(mkCam(c,i)); initHls(i, c.s); });
+    document.querySelectorAll('.tab').forEach(t => t.onclick = () => filter(t.dataset.r));
+    updateClock();
+    setInterval(updateClock, 1000);
+});
+</script>
+</body>
+</html>

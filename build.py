@@ -58,14 +58,11 @@ def get_commute_cameras():
 
         if is_commute and in_bounds:
             route_num = route.replace('I-', '').replace('SR-', '')
-            name = loc.get('locationName', 'Unknown')
-            # Clean up name
-            short_name = name.replace(f'I-{route_num} : ', '').replace(f'({route_num})', '').strip()
 
             cameras.append({
                 'route': route_num,
-                'name': short_name[:30],
                 'lat': lat,
+                'lon': lon,
                 'stream': stream
             })
 
@@ -83,11 +80,34 @@ def test_cameras(cameras):
             cam = futures[future]
             if future.result():
                 working.append(cam)
-                print(f"  ✓ {cam['route']}: {cam['name']}")
+                print(f"  ✓ {cam['route']} ({cam['lat']:.3f})")
 
-    # Sort by route priority then latitude (north to south)
-    route_priority = {'405': 1, '710': 2, '110': 3, '10': 4, '105': 5}
-    working.sort(key=lambda c: (route_priority.get(c['route'], 99), -c['lat']))
+    # Sort in commute order: 405 (N→S) then 710 (N→S), then alternatives
+    # This follows the drive from Culver City down 405, then 710 to Long Beach
+    def commute_order(cam):
+        route = cam['route']
+        lat = cam['lat']
+        lon = cam['lon']
+
+        if route == '405':
+            # 405: north to south, primary route start
+            return (0, -lat)
+        elif route == '710':
+            # 710: north to south, primary route end
+            return (1, -lat)
+        elif route == '105':
+            # 105: west to east (connector between 405 and 710)
+            return (2, -lon)  # west to east = increasing longitude
+        elif route == '110':
+            # 110: north to south (alternate)
+            return (3, -lat)
+        elif route == '10':
+            # 10: west to east (alternate start)
+            return (4, -lon)
+        else:
+            return (99, -lat)
+
+    working.sort(key=commute_order)
 
     print(f"\n{len(working)} working cameras")
     return working
@@ -100,9 +120,9 @@ def generate_html(cameras):
     for cam in cameras:
         counts[cam['route']] = counts.get(cam['route'], 0) + 1
 
-    # Generate camera JS array
+    # Generate camera JS array (no names needed - burned into feed)
     cams_js = ',\n    '.join([
-        f'{{r:"{c["route"]}",n:"{c["name"]}",s:"{c["stream"]}"}}'
+        f'{{r:"{c["route"]}",s:"{c["stream"]}"}}'
         for c in cameras
     ])
 
@@ -123,63 +143,64 @@ def generate_html(cameras):
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        html, body {{ height: 100%; overflow: hidden; }}
         body {{
-            background: #0a0a0f;
+            background: #000;
             color: #fff;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            display: flex;
+            flex-direction: column;
         }}
         .header {{
-            background: linear-gradient(135deg, #1a1a2e, #16213e);
-            padding: 12px 20px;
+            background: #111;
+            padding: 8px 16px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-shrink: 0;
         }}
-        .header h1 {{ font-size: 1.1em; font-weight: 500; }}
-        .header .time {{ font-size: 1.2em; font-weight: 300; }}
-        .status {{
-            padding: 6px 16px;
-            background: #111;
-            font-size: 0.75em;
-            color: #666;
-        }}
+        .header h1 {{ font-size: 0.95em; font-weight: 500; color: #888; }}
+        .header .time {{ font-size: 1.1em; font-weight: 300; }}
+        .header .info {{ font-size: 0.75em; color: #555; }}
         .tabs {{
             display: flex;
-            gap: 8px;
-            padding: 10px 16px;
+            gap: 6px;
+            padding: 6px 12px;
             background: #111;
             overflow-x: auto;
+            flex-shrink: 0;
+            border-bottom: 1px solid #222;
         }}
         .tab {{
-            padding: 6px 14px;
+            padding: 4px 12px;
             background: #222;
             border: none;
-            border-radius: 16px;
-            color: #888;
+            border-radius: 12px;
+            color: #666;
             cursor: pointer;
-            font-size: 0.85em;
+            font-size: 0.8em;
             white-space: nowrap;
         }}
         .tab.active {{ background: #0066cc; color: #fff; }}
         .tab .count {{
             background: rgba(255,255,255,0.2);
-            padding: 1px 6px;
-            border-radius: 8px;
-            margin-left: 4px;
+            padding: 1px 5px;
+            border-radius: 6px;
+            margin-left: 3px;
             font-size: 0.85em;
         }}
         .grid {{
+            flex: 1;
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 6px;
-            padding: 8px;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 2px;
+            padding: 2px;
+            overflow-y: auto;
         }}
         .cam {{
             position: relative;
-            background: #111;
-            border-radius: 6px;
-            overflow: hidden;
-            aspect-ratio: 16/9;
+            background: #000;
+            aspect-ratio: 4/3;
         }}
         .cam video {{
             width: 100%;
@@ -188,34 +209,25 @@ def generate_html(cameras):
         }}
         .cam .badge {{
             position: absolute;
-            top: 6px;
-            left: 6px;
-            background: rgba(0,100,200,0.85);
-            padding: 3px 8px;
-            border-radius: 10px;
-            font-size: 0.7em;
+            top: 4px;
+            left: 4px;
+            background: rgba(0,100,200,0.8);
+            padding: 2px 6px;
+            border-radius: 8px;
+            font-size: 0.65em;
             font-weight: 600;
         }}
         .cam .dot {{
             position: absolute;
-            top: 8px;
-            right: 8px;
-            width: 8px;
-            height: 8px;
+            top: 6px;
+            right: 6px;
+            width: 6px;
+            height: 6px;
             border-radius: 50%;
-            background: #444;
+            background: #333;
         }}
         .cam .dot.live {{ background: #0c6; animation: pulse 2s infinite; }}
         .cam .dot.err {{ background: #c33; }}
-        .cam .label {{
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            padding: 20px 10px 6px;
-            background: linear-gradient(transparent, rgba(0,0,0,0.85));
-            font-size: 0.75em;
-        }}
         @keyframes pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:0.4}} }}
         .fs {{
             position: fixed;
@@ -226,13 +238,13 @@ def generate_html(cameras):
         .fs video {{ width: 100%; height: 100%; object-fit: contain; }}
         .fs .x {{
             position: absolute;
-            top: 16px;
-            right: 16px;
+            top: 12px;
+            right: 12px;
             background: rgba(0,0,0,0.6);
             border: none;
             color: #fff;
-            padding: 8px 16px;
-            border-radius: 16px;
+            padding: 6px 14px;
+            border-radius: 12px;
             cursor: pointer;
         }}
     </style>
@@ -240,9 +252,9 @@ def generate_html(cameras):
 <body>
     <div class="header">
         <h1>Culver City → Long Beach</h1>
+        <span class="info">{len(cameras)} cams • {updated}</span>
         <span class="time" id="clock"></span>
     </div>
-    <div class="status">Updated {updated} • {len(cameras)} cameras</div>
     <div class="tabs">
         {tabs_html}
     </div>
@@ -268,7 +280,6 @@ function mkCam(c, i) {{
         <video id="v${{i}}" muted playsinline></video>
         <div class="badge">${{c.r}}</div>
         <div class="dot" id="d${{i}}"></div>
-        <div class="label">${{c.n}}</div>
     `;
     d.onclick = () => fullscreen(i);
     return d;

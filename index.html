@@ -7,63 +7,64 @@
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; overflow: hidden; }
         body {
-            background: #0a0a0f;
+            background: #000;
             color: #fff;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            display: flex;
+            flex-direction: column;
         }
         .header {
-            background: linear-gradient(135deg, #1a1a2e, #16213e);
-            padding: 12px 20px;
+            background: #111;
+            padding: 8px 16px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-shrink: 0;
         }
-        .header h1 { font-size: 1.1em; font-weight: 500; }
-        .header .time { font-size: 1.2em; font-weight: 300; }
-        .status {
-            padding: 6px 16px;
-            background: #111;
-            font-size: 0.75em;
-            color: #666;
-        }
+        .header h1 { font-size: 0.95em; font-weight: 500; color: #888; }
+        .header .time { font-size: 1.1em; font-weight: 300; }
+        .header .info { font-size: 0.75em; color: #555; }
         .tabs {
             display: flex;
-            gap: 8px;
-            padding: 10px 16px;
+            gap: 6px;
+            padding: 6px 12px;
             background: #111;
             overflow-x: auto;
+            flex-shrink: 0;
+            border-bottom: 1px solid #222;
         }
         .tab {
-            padding: 6px 14px;
+            padding: 4px 12px;
             background: #222;
             border: none;
-            border-radius: 16px;
-            color: #888;
+            border-radius: 12px;
+            color: #666;
             cursor: pointer;
-            font-size: 0.85em;
+            font-size: 0.8em;
             white-space: nowrap;
         }
         .tab.active { background: #0066cc; color: #fff; }
         .tab .count {
             background: rgba(255,255,255,0.2);
-            padding: 1px 6px;
-            border-radius: 8px;
-            margin-left: 4px;
+            padding: 1px 5px;
+            border-radius: 6px;
+            margin-left: 3px;
             font-size: 0.85em;
         }
         .grid {
+            flex: 1;
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 6px;
-            padding: 8px;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 2px;
+            padding: 2px;
+            overflow-y: auto;
         }
         .cam {
             position: relative;
-            background: #111;
-            border-radius: 6px;
-            overflow: hidden;
-            aspect-ratio: 16/9;
+            background: #000;
+            aspect-ratio: 4/3;
         }
         .cam video {
             width: 100%;
@@ -72,34 +73,25 @@
         }
         .cam .badge {
             position: absolute;
-            top: 6px;
-            left: 6px;
-            background: rgba(0,100,200,0.85);
-            padding: 3px 8px;
-            border-radius: 10px;
-            font-size: 0.7em;
+            top: 4px;
+            left: 4px;
+            background: rgba(0,100,200,0.8);
+            padding: 2px 6px;
+            border-radius: 8px;
+            font-size: 0.65em;
             font-weight: 600;
         }
         .cam .dot {
             position: absolute;
-            top: 8px;
-            right: 8px;
-            width: 8px;
-            height: 8px;
+            top: 6px;
+            right: 6px;
+            width: 6px;
+            height: 6px;
             border-radius: 50%;
-            background: #444;
+            background: #333;
         }
         .cam .dot.live { background: #0c6; animation: pulse 2s infinite; }
         .cam .dot.err { background: #c33; }
-        .cam .label {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            padding: 20px 10px 6px;
-            background: linear-gradient(transparent, rgba(0,0,0,0.85));
-            font-size: 0.75em;
-        }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
         .fs {
             position: fixed;
@@ -110,13 +102,13 @@
         .fs video { width: 100%; height: 100%; object-fit: contain; }
         .fs .x {
             position: absolute;
-            top: 16px;
-            right: 16px;
+            top: 12px;
+            right: 12px;
             background: rgba(0,0,0,0.6);
             border: none;
             color: #fff;
-            padding: 8px 16px;
-            border-radius: 16px;
+            padding: 6px 14px;
+            border-radius: 12px;
             cursor: pointer;
         }
     </style>
@@ -124,9 +116,9 @@
 <body>
     <div class="header">
         <h1>Culver City → Long Beach</h1>
+        <span class="info">23 cams • Jan 11, 08:11 PM</span>
         <span class="time" id="clock"></span>
     </div>
-    <div class="status">Updated Jan 11, 08:04 PM • 23 cameras</div>
     <div class="tabs">
         <button class="tab active" data-r="all">All <span class="count">23</span></button>
         <button class="tab" data-r="405">405 <span class="count">2</span></button>
@@ -137,29 +129,29 @@
     <div class="grid" id="grid"></div>
 <script>
 const cams = [
-    {r:"405",n:"(359) La Tijera",s:"https://wzmedia.dot.ca.gov/D7/CCTV-359.stream/playlist.m3u8"},
-    {r:"405",n:"(345) Western Ave",s:"https://wzmedia.dot.ca.gov/D7/CCTV-345.stream/playlist.m3u8"},
-    {r:"710",n:"(285) 3rd St",s:"https://wzmedia.dot.ca.gov/D7/CCTV-285.stream/playlist.m3u8"},
-    {r:"710",n:"(283) South of I-5",s:"https://wzmedia.dot.ca.gov/D7/CCTV-283.stream/playlist.m3u8"},
-    {r:"710",n:"(271) N/O Route 91",s:"https://wzmedia.dot.ca.gov/D7/CCTV-271.stream/playlist.m3u8"},
-    {r:"710",n:"(269) Long Beach Blvd",s:"https://wzmedia.dot.ca.gov/D7/CCTV-269.stream/playlist.m3u8"},
-    {r:"710",n:"(268) Del Amo Bl",s:"https://wzmedia.dot.ca.gov/D7/CCTV-268.stream/playlist.m3u8"},
-    {r:"710",n:"(267) North of I-405",s:"https://wzmedia.dot.ca.gov/D7/CCTV-267.stream/playlist.m3u8"},
-    {r:"710",n:"(954) North of SR-47",s:"https://wzmedia.dot.ca.gov/D7/CCTV-954.stream/playlist.m3u8"},
-    {r:"110",n:"(184) 11th St",s:"https://wzmedia.dot.ca.gov/D7/CCTV-184.stream/playlist.m3u8"},
-    {r:"110",n:"(178) Exposition Blvd",s:"https://wzmedia.dot.ca.gov/D7/CCTV-178.stream/playlist.m3u8"},
-    {r:"110",n:"(177) Martin Luther King Blvd",s:"https://wzmedia.dot.ca.gov/D7/CCTV-177.stream/playlist.m3u8"},
-    {r:"110",n:"(175) SO SLAUSON AVE",s:"https://wzmedia.dot.ca.gov/D7/CCTV-175.stream/playlist.m3u8"},
-    {r:"110",n:"(171) NO Manchester Ave",s:"https://wzmedia.dot.ca.gov/D7/CCTV-171.stream/playlist.m3u8"},
-    {r:"110",n:"(170) North Of Century Blvd",s:"https://wzmedia.dot.ca.gov/D7/CCTV-170.stream/playlist.m3u8"},
-    {r:"110",n:"(167) SO El Segundo Blvd",s:"https://wzmedia.dot.ca.gov/D7/CCTV-167.stream/playlist.m3u8"},
-    {r:"110",n:"(164) S/O El Segundo Blvd",s:"https://wzmedia.dot.ca.gov/D7/CCTV-164.stream/playlist.m3u8"},
-    {r:"110",n:"(166) South Of Rosecrans Ave",s:"https://wzmedia.dot.ca.gov/D7/CCTV-166.stream/playlist.m3u8"},
-    {r:"10",n:"(123) Route 110 CHP Tower",s:"https://wzmedia.dot.ca.gov/D7/CCTV-123.stream/playlist.m3u8"},
-    {r:"10",n:"(117) Crenshaw Blvd",s:"https://wzmedia.dot.ca.gov/D7/CCTV-117.stream/playlist.m3u8"},
-    {r:"10",n:"(125) Griffith/San Pedro",s:"https://wzmedia.dot.ca.gov/D7/CCTV-125.stream/playlist.m3u8"},
-    {r:"10",n:"(126) Channing Street",s:"https://wzmedia.dot.ca.gov/D7/CCTV-126.stream/playlist.m3u8"},
-    {r:"10",n:"(101) Mcclure West",s:"https://wzmedia.dot.ca.gov/D7/CCTV-101.stream/playlist.m3u8"}
+    {r:"405",s:"https://wzmedia.dot.ca.gov/D7/CCTV-359.stream/playlist.m3u8"},
+    {r:"405",s:"https://wzmedia.dot.ca.gov/D7/CCTV-345.stream/playlist.m3u8"},
+    {r:"710",s:"https://wzmedia.dot.ca.gov/D7/CCTV-285.stream/playlist.m3u8"},
+    {r:"710",s:"https://wzmedia.dot.ca.gov/D7/CCTV-283.stream/playlist.m3u8"},
+    {r:"710",s:"https://wzmedia.dot.ca.gov/D7/CCTV-271.stream/playlist.m3u8"},
+    {r:"710",s:"https://wzmedia.dot.ca.gov/D7/CCTV-269.stream/playlist.m3u8"},
+    {r:"710",s:"https://wzmedia.dot.ca.gov/D7/CCTV-268.stream/playlist.m3u8"},
+    {r:"710",s:"https://wzmedia.dot.ca.gov/D7/CCTV-267.stream/playlist.m3u8"},
+    {r:"710",s:"https://wzmedia.dot.ca.gov/D7/CCTV-954.stream/playlist.m3u8"},
+    {r:"110",s:"https://wzmedia.dot.ca.gov/D7/CCTV-184.stream/playlist.m3u8"},
+    {r:"110",s:"https://wzmedia.dot.ca.gov/D7/CCTV-178.stream/playlist.m3u8"},
+    {r:"110",s:"https://wzmedia.dot.ca.gov/D7/CCTV-177.stream/playlist.m3u8"},
+    {r:"110",s:"https://wzmedia.dot.ca.gov/D7/CCTV-175.stream/playlist.m3u8"},
+    {r:"110",s:"https://wzmedia.dot.ca.gov/D7/CCTV-171.stream/playlist.m3u8"},
+    {r:"110",s:"https://wzmedia.dot.ca.gov/D7/CCTV-170.stream/playlist.m3u8"},
+    {r:"110",s:"https://wzmedia.dot.ca.gov/D7/CCTV-167.stream/playlist.m3u8"},
+    {r:"110",s:"https://wzmedia.dot.ca.gov/D7/CCTV-164.stream/playlist.m3u8"},
+    {r:"110",s:"https://wzmedia.dot.ca.gov/D7/CCTV-166.stream/playlist.m3u8"},
+    {r:"10",s:"https://wzmedia.dot.ca.gov/D7/CCTV-126.stream/playlist.m3u8"},
+    {r:"10",s:"https://wzmedia.dot.ca.gov/D7/CCTV-125.stream/playlist.m3u8"},
+    {r:"10",s:"https://wzmedia.dot.ca.gov/D7/CCTV-123.stream/playlist.m3u8"},
+    {r:"10",s:"https://wzmedia.dot.ca.gov/D7/CCTV-117.stream/playlist.m3u8"},
+    {r:"10",s:"https://wzmedia.dot.ca.gov/D7/CCTV-101.stream/playlist.m3u8"}
 ];
 
 const players = new Map();
@@ -178,7 +170,6 @@ function mkCam(c, i) {
         <video id="v${i}" muted playsinline></video>
         <div class="badge">${c.r}</div>
         <div class="dot" id="d${i}"></div>
-        <div class="label">${c.n}</div>
     `;
     d.onclick = () => fullscreen(i);
     return d;

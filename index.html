@@ -56,15 +56,15 @@
         .grid {
             flex: 1;
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
             gap: 2px;
             padding: 2px;
-            overflow-y: auto;
+            overflow: hidden;
         }
         .cam {
             position: relative;
             background: #000;
-            aspect-ratio: 4/3;
+            min-width: 0;
+            min-height: 0;
         }
         .cam video {
             width: 100%;
@@ -116,7 +116,7 @@
 <body>
     <div class="header">
         <h1>Culver City → Long Beach</h1>
-        <span class="info">23 cams • Jan 11, 08:11 PM</span>
+        <span class="info">23 cams • Jan 11, 08:15 PM</span>
         <span class="time" id="clock"></span>
     </div>
     <div class="tabs">
@@ -217,12 +217,44 @@ function fullscreen(i) {
     d.querySelector('.x').onclick = () => d.remove();
 }
 
+function layoutGrid() {
+    const grid = document.getElementById('grid');
+    const visible = [...document.querySelectorAll('.cam')].filter(c => c.style.display !== 'none');
+    const n = visible.length;
+    if (n === 0) return;
+
+    const rect = grid.getBoundingClientRect();
+    const w = rect.width - 4;  // padding
+    const h = rect.height - 4;
+    const ratio = 4/3;  // camera aspect ratio
+
+    // Find optimal grid that fills space
+    let bestCols = 1, bestRows = n, bestSize = 0;
+    for (let cols = 1; cols <= n; cols++) {
+        const rows = Math.ceil(n / cols);
+        const cellW = w / cols;
+        const cellH = h / rows;
+        // Size limited by either width or height
+        const size = Math.min(cellW, cellH * ratio);
+        if (size > bestSize) {
+            bestSize = size;
+            bestCols = cols;
+            bestRows = rows;
+        }
+    }
+
+    grid.style.gridTemplateColumns = `repeat(${bestCols}, 1fr)`;
+    grid.style.gridTemplateRows = `repeat(${bestRows}, 1fr)`;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const g = document.getElementById('grid');
     cams.forEach((c,i) => { g.appendChild(mkCam(c,i)); initHls(i, c.s); });
-    document.querySelectorAll('.tab').forEach(t => t.onclick = () => filter(t.dataset.r));
+    document.querySelectorAll('.tab').forEach(t => t.onclick = () => { filter(t.dataset.r); layoutGrid(); });
     updateClock();
     setInterval(updateClock, 1000);
+    layoutGrid();
+    window.addEventListener('resize', layoutGrid);
 });
 </script>
 </body>

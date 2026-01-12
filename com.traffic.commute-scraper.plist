@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.traffic.commute-scraper</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/k/git/traffic/.venv/bin/python3</string>
+        <string>/Users/k/git/traffic/commute_scraper.py</string>
+        <string>--all-days</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/k/git/traffic</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/k/git/traffic/scraper.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/k/git/traffic/scraper.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+</dict>
+</plist>

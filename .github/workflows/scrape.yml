@@ -1,0 +1,33 @@
+name: Traffic Scraper
+
+on:
+  schedule:
+    # Run every 5 minutes during peak hours (5 AM - 10 PM PST = 13:00 - 06:00 UTC)
+    # GitHub Actions cron doesn't support */5, so we use multiple entries
+    - cron: '*/5 13-23 * * *'  # 1 PM - 11 PM UTC (5 AM - 3 PM PST)
+    - cron: '*/5 0-6 * * *'    # 12 AM - 6 AM UTC (4 PM - 10 PM PST)
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install boto3
+
+      - name: Run scraper
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+        run: python cloud/scraper_lambda.py

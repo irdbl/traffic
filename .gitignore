@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Database (regenerated from R2 data)
+*.db
+
+# Local data
+data/
+
+# Images
+*.jpg
+*.png
+
+# Logs
+*.log
+
+# Environment
+.env
+
+# macOS
+.DS_Store
+
+# Test/exploration scripts (not needed for production)
+test_*.py
+probe_*.py
+find_*.py
+fetch_*.py
+extract_*.py
+examine_*.py
+parse_*.py
+download_historical.py
+summary.py
+final_summary.py
+analyze_sigalert.py
+*.json
+!package.json
+
+# Keep these
+!cloud/

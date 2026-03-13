@@ -5,6 +5,7 @@ Serverless Traffic Scraper for GitHub Actions + Cloudflare R2
 Fetches traffic data from:
 1. Sigalert.com - speed sensors and incidents
 2. CHP CAD - real-time dispatch incidents
+3. Waze Live Map - police, accident, hazard, and road closure alerts
 
 Uploads to R2 as timestamped JSON.
 
@@ -30,6 +31,17 @@ DATA_URL = "https://www.sigalert.com/Data/SoCal/4~j/SoCalData.json"
 # CHP CAD
 CHP_URL = "https://cad.chp.ca.gov/Traffic.aspx"
 CHP_CENTERS = ["LACC", "OCCC"]  # Los Angeles, Orange County
+
+# Waze Live Map - split LA into tiles to stay under ~200 alert cap per request
+WAZE_URL = "https://www.waze.com/live-map/api/georss"
+WAZE_TILES = [
+    {"top": 34.10, "bottom": 33.90, "left": -118.40, "right": -118.15},  # Central LA
+    {"top": 33.90, "bottom": 33.70, "left": -118.40, "right": -118.10},  # South LA / Long Beach
+    {"top": 34.10, "bottom": 33.90, "left": -118.55, "right": -118.40},  # West LA / Santa Monica
+    {"top": 34.15, "bottom": 33.95, "left": -118.15, "right": -117.85},  # East LA / SGV
+    {"top": 34.30, "bottom": 34.10, "left": -118.65, "right": -118.40},  # SFV West
+    {"top": 34.30, "bottom": 34.10, "left": -118.40, "right": -118.10},  # SFV East / Glendale
+]
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:146.0) Gecko/20100101 Firefox/146.0",
@@ -130,6 +142,56 @@ def fetch_chp_incidents(center: str) -> list:
         return []
 
 
+def fetch_waze_alerts() -> list:
+    """Fetch Waze alerts from all LA tiles, deduplicated by UUID."""
+    seen = set()
+    all_alerts = []
+    headers = {"User-Agent": HEADERS["User-Agent"]}
+
+    for tile in WAZE_TILES:
+        try:
+            params = urllib.parse.urlencode({
+                "top": tile["top"], "bottom": tile["bottom"],
+                "left": tile["left"], "right": tile["right"],
+                "env": "na", "types": "alerts",
+            })
+            req = urllib.request.Request(f"{WAZE_URL}?{params}", headers=headers)
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            for a in data.get("alerts", []):
+                uid = a.get("uuid")
+                if uid and uid not in seen:
+                    seen.add(uid)
+                    all_alerts.append(a)
+        except Exception as e:
+            print(f"  Waze tile error: {e}")
+
+    return all_alerts
+
+
+def compact_waze_alert(a: dict) -> dict:
+    """Extract structured fields from a Waze alert."""
+    loc = a.get("location", {})
+    out = {
+        "uuid": a.get("uuid", ""),
+        "type": a.get("type", ""),
+        "subtype": a.get("subtype", ""),
+        "lat": round(loc.get("y", 0), 5),
+        "lon": round(loc.get("x", 0), 5),
+        "street": a.get("street", ""),
+        "city": a.get("city", ""),
+        "reliability": a.get("reliability", 0),
+        "thumbs_up": a.get("nThumbsUp", 0),
+        "pub_utc": a.get("pubMillis", 0),
+        "road_type": a.get("roadType", -1),
+    }
+    if a.get("reportDescription"):
+        out["description"] = a["reportDescription"]
+    if a.get("nComments", 0) > 0:
+        out["num_comments"] = a["nComments"]
+    return out
+
+
 def fetch_json(url: str) -> dict:
     """Fetch JSON from URL."""
     req = urllib.request.Request(url, headers=HEADERS)
@@ -175,6 +237,15 @@ def scrape_and_upload():
             chp_incidents[center] = incidents
             print(f"  CHP {center}: {len(incidents)} incidents")
 
+    # Fetch Waze alerts
+    waze_alerts = fetch_waze_alerts()
+    waze_compact = [compact_waze_alert(a) for a in waze_alerts]
+    waze_by_type = {}
+    for a in waze_alerts:
+        t = a.get("type", "?")
+        waze_by_type[t] = waze_by_type.get(t, 0) + 1
+    print(f"  Waze: {len(waze_alerts)} alerts {dict(waze_by_type)}")
+
     # Extract just speeds and incidents (cameras are large and rarely needed)
     compact_data = {
         "t": timestamp,
@@ -185,6 +256,7 @@ def scrape_and_upload():
             if len(i) >= 9
         ],
         "chp": chp_incidents,  # CHP CAD incidents by center
+        "waze": waze_compact,  # Waze alerts as structured objects
     }
 
     # Stats

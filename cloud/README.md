@@ -12,7 +12,7 @@ GitHub Actions (cron every 5 min)
   Cloudflare R2 (storage)
         │
         ▼
-  download_data.py → local SQLite → commute.py
+  download_data.py → local SQLite → analyze.py
 ```
 
 **Cost: $0** (within free tiers)
@@ -63,8 +63,8 @@ export R2_BUCKET_NAME="traffic-data"
 .venv/bin/pip install boto3
 .venv/bin/python cloud/download_data.py --days 7
 
-# Run commute analysis
-.venv/bin/python commute.py
+# Run analysis
+.venv/bin/python analyze.py
 ```
 
 ## Free Tier Limits
@@ -101,6 +101,6 @@ If you don't want cloud storage, just run locally:
 .venv/bin/python scraper.py
 
 # Or use launchd (macOS)
-cp com.traffic.commute-scraper.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.traffic.commute-scraper.plist
+cp com.traffic.scraper.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.traffic.scraper.plist
 ```
